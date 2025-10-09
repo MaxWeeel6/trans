@@ -1,0 +1,359 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+
+// Define the main App component
+const App = () => {
+    // State variables for text input, image input, translated text, loading status, and error messages
+    const [englishTextInput, setEnglishTextInput] = useState(''); // For direct text input
+    const [imageFile, setImageFile] = useState(null); // For image file input
+    const [imagePreviewUrl, setImagePreviewUrl] = useState(''); // For image preview
+    const [arabicText, setArabicText] = useState(''); // Translated output
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [db, setDb] = useState(null); // Not used in this version but kept for consistency
+    const [auth, setAuth] = useState(null);
+    const [userId, setUserId] = useState(null);
+
+    // Initialize Firebase and authenticate the user
+    useEffect(() => {
+        try {
+            // Get Firebase configuration and app ID from global variables
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+            // Initialize Firebase app
+            const firebaseApp = initializeApp(firebaseConfig, appId);
+            const firebaseAuth = getAuth(firebaseApp);
+
+            setAuth(firebaseAuth);
+
+            // Sign in anonymously or with custom token if available
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            if (initialAuthToken) {
+                signInWithCustomToken(firebaseAuth, initialAuthToken)
+                    .then((userCredential) => {
+                        setUserId(userCredential.user.uid);
+                    })
+                    .catch((error) => {
+                        console.error('Firebase custom token sign-in error:', error);
+                        signInAnonymously(firebaseAuth)
+                            .then((userCredential) => {
+                                setUserId(userCredential.user.uid);
+                            })
+                            .catch((anonError) => {
+                                console.error('Firebase anonymous sign-in error:', anonError);
+                                setError('فشل في تهيئة المصادقة. يرجى المحاولة مرة أخرى.'); // Authentication initialization failed
+                            });
+                    });
+            } else {
+                signInAnonymously(firebaseAuth)
+                    .then((userCredential) => {
+                        setUserId(userCredential.user.uid);
+                    })
+                    .catch((error) => {
+                        console.error('Firebase anonymous sign-in error:', error);
+                        setError('فشل في تهيئة المصادقة. يرجى المحاولة مرة أخرى.'); // Authentication initialization failed
+                    });
+            }
+        } catch (e) {
+            console.error('Firebase initialization error:', e);
+            setError('فشل في تهيئة الخدمات الأساسية. يرجى تحديث الصفحة.'); // Core service initialization failed
+        }
+    }, []);
+
+    // Handle image file selection
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (!file.type.startsWith('image/')) {
+                setError('الرجاء تحميل ملف صورة صالح (JPEG, PNG, GIF).'); // Please upload a valid image file
+                setImageFile(null);
+                setImagePreviewUrl('');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                setError('حجم الصورة كبير جداً. الحد الأقصى هو 5 ميجابايت.'); // Image size is too large. Max 5MB
+                setImageFile(null);
+                setImagePreviewUrl('');
+                return;
+            }
+
+            setImageFile(file);
+            setError(''); // Clear any previous errors
+            setEnglishTextInput(''); // Clear text input when image is chosen
+
+            // Create a URL for image preview
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImagePreviewUrl(reader.result);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            setImageFile(null);
+            setImagePreviewUrl('');
+            setError('');
+        }
+    };
+
+    // Function to handle the translation process
+    const handleTranslate = async () => {
+        // Clear previous error messages and translated text
+        setError('');
+        setArabicText('');
+
+        // Prioritize image translation if an image is provided
+        if (imageFile) {
+            await translateImage();
+        } else if (englishTextInput.trim()) { // Fallback to text translation if no image but text is present
+            await translateText();
+        } else {
+            setError('الرجاء إدخال نص أو تحميل صورة للترجمة.'); // Please enter text or upload an image to translate.
+            return;
+        }
+    };
+
+    // Helper function to translate text
+    const translateText = async () => {
+        if (!englishTextInput.trim()) return; // Should be handled by parent handleTranslate
+
+        setIsLoading(true);
+        try {
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: ترجم النص التالي من الإنجليزية إلى العربية: "${englishTextInput}" }] });
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey};
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                const text = result.candidates[0].content.parts[0].text;
+                setArabicText(text);
+            } else {
+                setError('تعذر الحصول على ترجمة النص. يرجى المحاولة مرة أخرى.'); // Could not get text translation
+            }
+        } catch (err) {
+            console.error('Text translation error:', err);
+            setError('حدث خطأ أثناء ترجمة النص. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.'); // An error occurred during text translation.
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Helper function to translate image
+    const translateImage = async () => {
+        if (!imageFile) return; // Should be handled by parent handleTranslate
+
+        setIsLoading(true);
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(imageFile);
+
+            reader.onload = async () => {
+                const base64ImageData = reader.result.split(',')[1];
+                const mimeType = imageFile.type;
+
+                let chatHistory = [];
+                chatHistory.push({
+                    role: "user",
+                    parts: [
+                        { text: ترجم أي نص موجود في هذه الصورة من الإنجليزية إلى العربية: },
+                        {
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: base64ImageData
+                            }
+                        }
+                    ]
+                });
+
+                const payload = { contents: chatHistory };
+                const apiKey = "";
+                const apiUrl = https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey};
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    setArabicText(text);
+                } else {
+                    setError('تعذر الحصول على ترجمة من الصورة. يرجى المحاولة مرة أخرى أو تجربة صورة أخرى.'); // Could not get translation from image.
+                }
+                setIsLoading(false); // Set loading to false after successful image translation or error
+            };
+
+            reader.onerror = (error) => {
+                console.error('Error reading file:', error);
+                setError('حدث خطأ أثناء قراءة الصورة. يرجى المحاولة مرة أخرى.'); // An error occurred while reading the image.
+                setIsLoading(false);
+            };
+
+        } catch (err) {
+            console.error('Image translation error:', err);
+            setError('حدث خطأ أثناء ترجمة الصورة. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.'); // An error occurred during image translation.
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        // Main container with responsive styling and comfortable gradient colors
+        <div className="min-h-screen bg-gradient-to-br from-emerald-200 to-sky-300 flex items-center justify-center p-4 font-sans antialiased">
+            <style>
+                {`
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+                body {
+                    font-family: 'Inter', sans-serif;
+                }
+                .scrollbar-hide::-webkit-scrollbar {
+                    display: none;
+                }
+                .scrollbar-hide {
+                    -ms-overflow-style: none; /* IE and Edge */
+                    scrollbar-width: none; /* Firefox */
+                }
+                `}
+            </style>
+            {/* Translation card container */}
+            <div className="bg-white rounded-xl shadow-2xl p-6 md:p-8 w-full max-w-2xl transform transition-all duration-300 hover:scale-[1.01] flex flex-col">
+                <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-6 text-center">
+                    مترجم النصوص والصور إنجليزي-عربي
+                    <span className="block text-base font-normal text-gray-500 mt-2">
+                    ترجمة فورية للنصوص أو النصوص من الصور
+                    </span>
+                </h1>
+
+                {/* English text input section */}
+                <div className="mb-6 flex-1">
+                    <label htmlFor="english-text-input" className="block text-gray-700 text-lg font-medium mb-2">
+                        أدخل النص الإنجليزي:
+                    </label>
+                    <textarea
+                        id="english-text-input"
+                        className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none resize-none text-left placeholder-gray-400 text-lg scrollbar-hide"
+                        rows="6"
+                        placeholder="ادخل النص الإنجليزي هنا أو قم بتحميل صورة..."
+                        value={englishTextInput}
+                        onChange={(e) => {
+                            setEnglishTextInput(e.target.value);
+                            // Clear image related states if user starts typing text
+                            if (e.target.value.trim() !== '') {
+                                setImageFile(null);
+                                setImagePreviewUrl('');
+                                // Clear file input value to reflect state change
+                                const fileInput = document.getElementById('image-input');
+                               if (fileInput) fileInput.value = '';
+                            }
+                        }}
+                        dir="ltr" // Left-to-right direction for English
+                    ></textarea>
+                </div>
+
+                <div className="text-center text-gray-600 mb-6 font-semibold text-lg">
+                    أو
+                </div>
+
+                {/* Image input section */}
+                <div className="mb-6 flex flex-col items-center">
+                    <label htmlFor="image-input" className="block text-gray-700 text-lg font-medium mb-2">
+                        تحميل صورة (إنجليزية):
+                    </label>
+                    <input
+                        id="image-input"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                            handleImageChange(e);
+                            // Clear text input if user selects an image
+                            if (e.target.files.length > 0) {
+                                setEnglishTextInput('');
+                            }
+                        }}
+                        className="block w-full text-sm text-gray-500
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-full file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-teal-50 file:text-teal-700
+                                hover:file:bg-teal-100 cursor-pointer"
+                    />
+                    {imagePreviewUrl && (
+                        <div className="mt-4 w-full flex justify-center">
+                            <img src={imagePreviewUrl} alt="Image Preview" className="max-w-full h-auto rounded-lg shadow-md border border-gray-200 object-contain" style={{ maxHeight: '300px' }} />
+                        </div>
+                    )}
+                </div>
+
+                {/* Translate button */}
+                <button
+                    onClick={handleTranslate}
+                    className={`w-full py-4 px-6 rounded-lg text-xl font-semibold transition-all duration-300 ease-in-out ${
+                        isLoading
+                            ? 'bg-teal-400 cursor-not-allowed'
+                            : 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+                    }`}
+                    disabled={isLoading}
+                >
+                    {isLoading ? (
+                        <div className="flex items-center justify-center">
+                            <svg className="animate-spin h-6 w-6 text-white mr-3" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            جاري الترجمة...
+                        </div>
+                    ) : (
+                        'ترجمة'
+                    )}
+                </button>
+
+                {/* Error message display */}
+                {error && (
+                    <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-center">
+                        {error}
+                    </div>
+                )}
+
+                {/* Arabic output section */}
+                <div className="mt-6 flex-1">
+                    <label htmlFor="arabic-output" className="block text-gray-700 text-lg font-medium mb-2">
+                        النص العربي المترجم:
+                    </label>
+                    <textarea
+                        id="arabic-output"
+                        className="w-full p-4 border border-gray-300 bg-gray-50 rounded-lg text-right placeholder-gray-400 text-lg scrollbar-hide"
+                       rows="6"
+                        placeholder="النص المترجم سيظهر هنا..."
+                        value={arabicText}
+                        readOnly // Output is read-only
+                        dir="rtl" // Right-to-left direction for Arabic
+                    ></textarea>
+                </div>
+
+                {/* User ID display (for debugging/identification) */}
+                {userId && (
+                    <div className="mt-6 text-sm text-gray-500 text-center">
+                        معرف المستخدم: <span className="font-mono text-gray-600 break-all">{userId}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default App;   
