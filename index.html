@@ -1,359 +1,606 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>مولد أسئلة اختيار من متعدد من ملفات PDF</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #f5f7fa;
+            --fg: #1f2937;
+            --accent: #2563eb;
+            --accent-light: rgba(37, 99, 235, 0.12);
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --error: #dc2626;
+            --success: #16a34a;
+        }
 
-// Define the main App component
-const App = () => {
-    // State variables for text input, image input, translated text, loading status, and error messages
-    const [englishTextInput, setEnglishTextInput] = useState(''); // For direct text input
-    const [imageFile, setImageFile] = useState(null); // For image file input
-    const [imagePreviewUrl, setImagePreviewUrl] = useState(''); // For image preview
-    const [arabicText, setArabicText] = useState(''); // Translated output
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [db, setDb] = useState(null); // Not used in this version but kept for consistency
-    const [auth, setAuth] = useState(null);
-    const [userId, setUserId] = useState(null);
+        * {
+            box-sizing: border-box;
+        }
 
-    // Initialize Firebase and authenticate the user
-    useEffect(() => {
-        try {
-            // Get Firebase configuration and app ID from global variables
-            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        body {
+            margin: 0;
+            font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem;
+        }
 
-            // Initialize Firebase app
-            const firebaseApp = initializeApp(firebaseConfig, appId);
-            const firebaseAuth = getAuth(firebaseApp);
+        h1 {
+            font-size: clamp(1.8rem, 2.5vw, 2.5rem);
+            margin-bottom: 0.75rem;
+            text-align: center;
+        }
 
-            setAuth(firebaseAuth);
+        p.lead {
+            font-size: 1.05rem;
+            max-width: 780px;
+            text-align: center;
+            line-height: 1.8;
+            margin-bottom: 2rem;
+        }
 
-            // Sign in anonymously or with custom token if available
-            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-            if (initialAuthToken) {
-                signInWithCustomToken(firebaseAuth, initialAuthToken)
-                    .then((userCredential) => {
-                        setUserId(userCredential.user.uid);
-                    })
-                    .catch((error) => {
-                        console.error('Firebase custom token sign-in error:', error);
-                        signInAnonymously(firebaseAuth)
-                            .then((userCredential) => {
-                                setUserId(userCredential.user.uid);
-                            })
-                            .catch((anonError) => {
-                                console.error('Firebase anonymous sign-in error:', anonError);
-                                setError('فشل في تهيئة المصادقة. يرجى المحاولة مرة أخرى.'); // Authentication initialization failed
-                            });
-                    });
-            } else {
-                signInAnonymously(firebaseAuth)
-                    .then((userCredential) => {
-                        setUserId(userCredential.user.uid);
-                    })
-                    .catch((error) => {
-                        console.error('Firebase anonymous sign-in error:', error);
-                        setError('فشل في تهيئة المصادقة. يرجى المحاولة مرة أخرى.'); // Authentication initialization failed
-                    });
+        .app-card {
+            width: min(100%, 960px);
+            background: var(--card);
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+            padding: clamp(1.2rem, 2vw, 2rem);
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .input-section {
+            display: grid;
+            gap: 1.2rem;
+        }
+
+        .field {
+            display: grid;
+            gap: 0.4rem;
+        }
+
+        .field label {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .field input[type="number"],
+        .field input[type="file"] {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            font-size: 1rem;
+            background: rgba(15, 23, 42, 0.02);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .field input[type="number"]:focus,
+        .field input[type="file"]:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 4px var(--accent-light);
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .actions button {
+            flex: 1;
+            min-width: 220px;
+            padding: 0.85rem 1rem;
+            border-radius: 14px;
+            border: none;
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: var(--accent);
+            color: white;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+
+        .actions button:disabled {
+            background: #94a3b8;
+            cursor: wait;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .actions button:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(37, 99, 235, 0.25);
+        }
+
+        .notice {
+            padding: 0.9rem 1.1rem;
+            border-radius: 12px;
+            border: 1px dashed var(--accent);
+            background: rgba(37, 99, 235, 0.08);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        .error-message,
+        .success-message {
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .error-message {
+            background: rgba(220, 38, 38, 0.08);
+            border: 1px solid rgba(220, 38, 38, 0.3);
+            color: var(--error);
+        }
+
+        .success-message {
+            background: rgba(22, 163, 74, 0.08);
+            border: 1px solid rgba(22, 163, 74, 0.25);
+            color: var(--success);
+        }
+
+        .questions {
+            display: grid;
+            gap: 1.2rem;
+        }
+
+        .question-card {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.2rem;
+            background: white;
+            display: grid;
+            gap: 0.9rem;
+            position: relative;
+        }
+
+        .question-card header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+
+        .question-card h2 {
+            margin: 0;
+            font-size: 1.15rem;
+        }
+
+        .options {
+            display: grid;
+            gap: 0.6rem;
+        }
+
+        .option {
+            display: flex;
+            gap: 0.65rem;
+            align-items: center;
+            padding: 0.6rem 0.8rem;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            transition: border-color 0.15s ease, background 0.15s ease;
+            cursor: pointer;
+        }
+
+        .option input {
+            accent-color: var(--accent);
+            transform: scale(1.1);
+        }
+
+        .option.correct {
+            border-color: rgba(22, 163, 74, 0.5);
+            background: rgba(22, 163, 74, 0.08);
+        }
+
+        .option.incorrect {
+            border-color: rgba(220, 38, 38, 0.4);
+            background: rgba(220, 38, 38, 0.08);
+        }
+
+        .sentence-preview {
+            font-size: 0.95rem;
+            color: #4b5563;
+            background: rgba(15, 23, 42, 0.03);
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            line-height: 1.8;
+        }
+
+        .results {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem 1.5rem;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            border-radius: 14px;
+            border: 1px solid rgba(15, 23, 42, 0.05);
+            background: rgba(15, 23, 42, 0.02);
+        }
+
+        .results strong {
+            font-size: 1.1rem;
+        }
+
+        .footer-info {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #6b7280;
+            margin-top: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 1rem;
             }
-        } catch (e) {
-            console.error('Firebase initialization error:', e);
-            setError('فشل في تهيئة الخدمات الأساسية. يرجى تحديث الصفحة.'); // Core service initialization failed
-        }
-    }, []);
 
-    // Handle image file selection
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            if (!file.type.startsWith('image/')) {
-                setError('الرجاء تحميل ملف صورة صالح (JPEG, PNG, GIF).'); // Please upload a valid image file
-                setImageFile(null);
-                setImagePreviewUrl('');
-                return;
-            }
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                setError('حجم الصورة كبير جداً. الحد الأقصى هو 5 ميجابايت.'); // Image size is too large. Max 5MB
-                setImageFile(null);
-                setImagePreviewUrl('');
-                return;
+            .actions {
+                flex-direction: column;
+                align-items: stretch;
             }
 
-            setImageFile(file);
-            setError(''); // Clear any previous errors
-            setEnglishTextInput(''); // Clear text input when image is chosen
-
-            // Create a URL for image preview
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreviewUrl(reader.result);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            setImageFile(null);
-            setImagePreviewUrl('');
-            setError('');
-        }
-    };
-
-    // Function to handle the translation process
-    const handleTranslate = async () => {
-        // Clear previous error messages and translated text
-        setError('');
-        setArabicText('');
-
-        // Prioritize image translation if an image is provided
-        if (imageFile) {
-            await translateImage();
-        } else if (englishTextInput.trim()) { // Fallback to text translation if no image but text is present
-            await translateText();
-        } else {
-            setError('الرجاء إدخال نص أو تحميل صورة للترجمة.'); // Please enter text or upload an image to translate.
-            return;
-        }
-    };
-
-    // Helper function to translate text
-    const translateText = async () => {
-        if (!englishTextInput.trim()) return; // Should be handled by parent handleTranslate
-
-        setIsLoading(true);
-        try {
-            let chatHistory = [];
-            chatHistory.push({ role: "user", parts: [{ text: ترجم النص التالي من الإنجليزية إلى العربية: "${englishTextInput}" }] });
-            const payload = { contents: chatHistory };
-            const apiKey = "";
-            const apiUrl = https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey};
-
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            const result = await response.json();
-
-            if (result.candidates && result.candidates.length > 0 &&
-                result.candidates[0].content && result.candidates[0].content.parts &&
-                result.candidates[0].content.parts.length > 0) {
-                const text = result.candidates[0].content.parts[0].text;
-                setArabicText(text);
-            } else {
-                setError('تعذر الحصول على ترجمة النص. يرجى المحاولة مرة أخرى.'); // Could not get text translation
+            .actions button {
+                width: 100%;
             }
-        } catch (err) {
-            console.error('Text translation error:', err);
-            setError('حدث خطأ أثناء ترجمة النص. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.'); // An error occurred during text translation.
-        } finally {
-            setIsLoading(false);
         }
-    };
+    </style>
+</head>
+<body>
+    <h1>منشئ أسئلة اختيار من متعدد من ملفات PDF</h1>
+    <p class="lead">
+        حمّل ملف PDF باللغة العربية أو الإنجليزية وسيقوم التطبيق بتحليل محتواه واقتراح مجموعة من أسئلة الاختيار من متعدد
+        بشكل تلقائي. اختر عدد الأسئلة المطلوبة ثم اضغط على زر &laquo;توليد الأسئلة&raquo; لبدء التفاعل.
+    </p>
 
-    // Helper function to translate image
-    const translateImage = async () => {
-        if (!imageFile) return; // Should be handled by parent handleTranslate
+    <div class="app-card">
+        <div class="input-section">
+            <div class="field">
+                <label for="pdf-input">ملف PDF</label>
+                <input type="file" id="pdf-input" accept="application/pdf" />
+            </div>
 
-        setIsLoading(true);
-        try {
-            const reader = new FileReader();
-            reader.readAsDataURL(imageFile);
+            <div class="field">
+                <label for="question-count">عدد الأسئلة المطلوبة</label>
+                <input type="number" id="question-count" min="1" max="30" value="5" />
+            </div>
 
-            reader.onload = async () => {
-                const base64ImageData = reader.result.split(',')[1];
-                const mimeType = imageFile.type;
+            <div class="notice">
+                يتم استخراج النص من كامل الملف، لذلك قد يستغرق التحليل بضع ثوانٍ للملفات الكبيرة. ننصح باستخدام ملفات تحتوي على
+                نص قابل للبحث (غير ممسوحة ضوئياً) للحصول على أفضل النتائج.
+            </div>
 
-                let chatHistory = [];
-                chatHistory.push({
-                    role: "user",
-                    parts: [
-                        { text: ترجم أي نص موجود في هذه الصورة من الإنجليزية إلى العربية: },
-                        {
-                            inlineData: {
-                                mimeType: mimeType,
-                                data: base64ImageData
-                            }
-                        }
-                    ]
-                });
+            <div class="actions">
+                <button id="generate-btn">توليد الأسئلة</button>
+                <span id="loading-indicator" class="hidden">جاري استخراج النص وتحليل المحتوى...</span>
+            </div>
 
-                const payload = { contents: chatHistory };
-                const apiKey = "";
-                const apiUrl = https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey};
+            <div id="feedback" class="hidden"></div>
+        </div>
 
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+        <section id="questions-section" class="questions hidden" aria-live="polite"></section>
 
-                const result = await response.json();
-
-                if (result.candidates && result.candidates.length > 0 &&
-                    result.candidates[0].content && result.candidates[0].content.parts &&
-                    result.candidates[0].content.parts.length > 0) {
-                    const text = result.candidates[0].content.parts[0].text;
-                    setArabicText(text);
-                } else {
-                    setError('تعذر الحصول على ترجمة من الصورة. يرجى المحاولة مرة أخرى أو تجربة صورة أخرى.'); // Could not get translation from image.
-                }
-                setIsLoading(false); // Set loading to false after successful image translation or error
-            };
-
-            reader.onerror = (error) => {
-                console.error('Error reading file:', error);
-                setError('حدث خطأ أثناء قراءة الصورة. يرجى المحاولة مرة أخرى.'); // An error occurred while reading the image.
-                setIsLoading(false);
-            };
-
-        } catch (err) {
-            console.error('Image translation error:', err);
-            setError('حدث خطأ أثناء ترجمة الصورة. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.'); // An error occurred during image translation.
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        // Main container with responsive styling and comfortable gradient colors
-        <div className="min-h-screen bg-gradient-to-br from-emerald-200 to-sky-300 flex items-center justify-center p-4 font-sans antialiased">
-            <style>
-                {`
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-                body {
-                    font-family: 'Inter', sans-serif;
-                }
-                .scrollbar-hide::-webkit-scrollbar {
-                    display: none;
-                }
-                .scrollbar-hide {
-                    -ms-overflow-style: none; /* IE and Edge */
-                    scrollbar-width: none; /* Firefox */
-                }
-                `}
-            </style>
-            {/* Translation card container */}
-            <div className="bg-white rounded-xl shadow-2xl p-6 md:p-8 w-full max-w-2xl transform transition-all duration-300 hover:scale-[1.01] flex flex-col">
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-6 text-center">
-                    مترجم النصوص والصور إنجليزي-عربي
-                    <span className="block text-base font-normal text-gray-500 mt-2">
-                    ترجمة فورية للنصوص أو النصوص من الصور
-                    </span>
-                </h1>
-
-                {/* English text input section */}
-                <div className="mb-6 flex-1">
-                    <label htmlFor="english-text-input" className="block text-gray-700 text-lg font-medium mb-2">
-                        أدخل النص الإنجليزي:
-                    </label>
-                    <textarea
-                        id="english-text-input"
-                        className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none resize-none text-left placeholder-gray-400 text-lg scrollbar-hide"
-                        rows="6"
-                        placeholder="ادخل النص الإنجليزي هنا أو قم بتحميل صورة..."
-                        value={englishTextInput}
-                        onChange={(e) => {
-                            setEnglishTextInput(e.target.value);
-                            // Clear image related states if user starts typing text
-                            if (e.target.value.trim() !== '') {
-                                setImageFile(null);
-                                setImagePreviewUrl('');
-                                // Clear file input value to reflect state change
-                                const fileInput = document.getElementById('image-input');
-                               if (fileInput) fileInput.value = '';
-                            }
-                        }}
-                        dir="ltr" // Left-to-right direction for English
-                    ></textarea>
-                </div>
-
-                <div className="text-center text-gray-600 mb-6 font-semibold text-lg">
-                    أو
-                </div>
-
-                {/* Image input section */}
-                <div className="mb-6 flex flex-col items-center">
-                    <label htmlFor="image-input" className="block text-gray-700 text-lg font-medium mb-2">
-                        تحميل صورة (إنجليزية):
-                    </label>
-                    <input
-                        id="image-input"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                            handleImageChange(e);
-                            // Clear text input if user selects an image
-                            if (e.target.files.length > 0) {
-                                setEnglishTextInput('');
-                            }
-                        }}
-                        className="block w-full text-sm text-gray-500
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded-full file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-teal-50 file:text-teal-700
-                                hover:file:bg-teal-100 cursor-pointer"
-                    />
-                    {imagePreviewUrl && (
-                        <div className="mt-4 w-full flex justify-center">
-                            <img src={imagePreviewUrl} alt="Image Preview" className="max-w-full h-auto rounded-lg shadow-md border border-gray-200 object-contain" style={{ maxHeight: '300px' }} />
-                        </div>
-                    )}
-                </div>
-
-                {/* Translate button */}
-                <button
-                    onClick={handleTranslate}
-                    className={`w-full py-4 px-6 rounded-lg text-xl font-semibold transition-all duration-300 ease-in-out ${
-                        isLoading
-                            ? 'bg-teal-400 cursor-not-allowed'
-                            : 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
-                    }`}
-                    disabled={isLoading}
-                >
-                    {isLoading ? (
-                        <div className="flex items-center justify-center">
-                            <svg className="animate-spin h-6 w-6 text-white mr-3" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            جاري الترجمة...
-                        </div>
-                    ) : (
-                        'ترجمة'
-                    )}
-                </button>
-
-                {/* Error message display */}
-                {error && (
-                    <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-center">
-                        {error}
-                    </div>
-                )}
-
-                {/* Arabic output section */}
-                <div className="mt-6 flex-1">
-                    <label htmlFor="arabic-output" className="block text-gray-700 text-lg font-medium mb-2">
-                        النص العربي المترجم:
-                    </label>
-                    <textarea
-                        id="arabic-output"
-                        className="w-full p-4 border border-gray-300 bg-gray-50 rounded-lg text-right placeholder-gray-400 text-lg scrollbar-hide"
-                       rows="6"
-                        placeholder="النص المترجم سيظهر هنا..."
-                        value={arabicText}
-                        readOnly // Output is read-only
-                        dir="rtl" // Right-to-left direction for Arabic
-                    ></textarea>
-                </div>
-
-                {/* User ID display (for debugging/identification) */}
-                {userId && (
-                    <div className="mt-6 text-sm text-gray-500 text-center">
-                        معرف المستخدم: <span className="font-mono text-gray-600 break-all">{userId}</span>
-                    </div>
-                )}
+        <div id="results" class="results hidden">
+            <strong id="score"></strong>
+            <div class="actions" style="margin: 0; gap: 0.6rem;">
+                <button id="check-answers-btn">تحقق من الإجابات</button>
+                <button id="retry-btn" style="background: #1f2937;">إعادة المحاولة</button>
             </div>
         </div>
-    );
-};
+    </div>
 
-export default App;   
+    <p class="footer-info">
+        تم بناء هذا التطبيق باستخدام مكتبة <strong>pdf.js</strong> لاستخراج النص من ملفات PDF وخوارزمية تحليل بسيطة لاشتقاق
+        الكلمات المفتاحية لكل سؤال. يمكنك تجربة الملف نفسه مرّات متعددة للحصول على أسئلة مختلفة في كل مرة.
+    </p>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js" integrity="sha512-4gExemqkcvdiA7YKdijMxOJ5uUj5FbbY/JLv1EIMRgsk1rF+/8EQ3myapWcTV5p7b/4ZS9NdN+N7PIrot5mjqg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
+
+        const pdfInput = document.getElementById('pdf-input');
+        const questionCountInput = document.getElementById('question-count');
+        const generateBtn = document.getElementById('generate-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const feedback = document.getElementById('feedback');
+        const questionsSection = document.getElementById('questions-section');
+        const resultsBar = document.getElementById('results');
+        const scoreLabel = document.getElementById('score');
+        const checkAnswersBtn = document.getElementById('check-answers-btn');
+        const retryBtn = document.getElementById('retry-btn');
+
+        let currentQuestions = [];
+        let userSelections = new Map();
+        let answersRevealed = false;
+
+        function showMessage(message, type = 'error') {
+            feedback.textContent = message;
+            feedback.className = type === 'error' ? 'error-message' : 'success-message';
+            feedback.classList.remove('hidden');
+        }
+
+        function clearMessage() {
+            feedback.textContent = '';
+            feedback.className = 'hidden';
+        }
+
+        function toggleLoading(isLoading) {
+            generateBtn.disabled = isLoading;
+            loadingIndicator.classList.toggle('hidden', !isLoading);
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function normalizeWord(word) {
+            return word
+                .toLowerCase()
+                .replace(/["'،,:;()\[\]{}<>«»]/g, '')
+                .trim();
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function extractCandidateWords(text) {
+            const matches = text.match(/\p{L}{4,}/gu) || [];
+            return matches.map(normalizeWord).filter(Boolean);
+        }
+
+        function pickDistractors(correct, pool, count) {
+            const candidates = pool.filter((word) => word !== correct);
+            shuffle(candidates);
+            return [...new Set(candidates)].slice(0, count);
+        }
+
+        function createQuestionFromSentence(sentence, globalPool) {
+            const words = extractCandidateWords(sentence);
+            const uniqueWords = [...new Set(words.filter((word) => word.length > 3))];
+            if (uniqueWords.length === 0) return null;
+
+            const answer = uniqueWords[Math.floor(Math.random() * uniqueWords.length)];
+            const distractors = pickDistractors(answer, globalPool, 3);
+            if (distractors.length < 3) return null;
+
+            const placeholder = '_____';
+            const escapedAnswer = escapeRegExp(answer);
+            const answerRegex = new RegExp(`(${escapedAnswer})`, 'iu');
+            const questionText = sentence.replace(answerRegex, placeholder);
+
+            return {
+                question: questionText.trim(),
+                answer,
+                options: shuffle([answer, ...distractors]),
+                originalSentence: sentence.trim()
+            };
+        }
+
+        function generateQuestionsFromText(text, count) {
+            const cleanedText = text
+                .replace(/\s+/g, ' ')
+                .replace(/\u00ad/g, '')
+                .replace(/\n{2,}/g, '\n');
+
+            const sentences = cleanedText
+                .split(/(?<=[.!؟?])\s+/u)
+                .map((sentence) => sentence.trim())
+                .filter((sentence) => sentence.length > 35);
+
+            const wordPool = extractCandidateWords(cleanedText);
+            const uniquePool = [...new Set(wordPool)];
+            const questions = [];
+
+            const shuffledSentences = shuffle([...sentences]);
+
+            for (const sentence of shuffledSentences) {
+                if (questions.length >= count) break;
+                const question = createQuestionFromSentence(sentence, uniquePool);
+                if (question) {
+                    questions.push(question);
+                }
+            }
+
+            return questions;
+        }
+
+        async function extractTextFromPdf(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let text = '';
+
+            for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+                const page = await pdf.getPage(pageNumber);
+                const content = await page.getTextContent();
+                const strings = content.items.map((item) => item.str);
+                text += strings.join(' ') + '\n';
+            }
+
+            return text;
+        }
+
+        function renderQuestions(questions) {
+            questionsSection.innerHTML = '';
+            questionsSection.classList.toggle('hidden', questions.length === 0);
+            resultsBar.classList.toggle('hidden', questions.length === 0);
+            answersRevealed = false;
+            userSelections = new Map();
+
+            questions.forEach((question, index) => {
+                const card = document.createElement('article');
+                card.className = 'question-card';
+                card.dataset.index = index;
+
+                const header = document.createElement('header');
+                const title = document.createElement('h2');
+                title.textContent = `السؤال ${index + 1}`;
+                header.appendChild(title);
+                card.appendChild(header);
+
+                const body = document.createElement('p');
+                body.textContent = question.question;
+                card.appendChild(body);
+
+                const optionsList = document.createElement('div');
+                optionsList.className = 'options';
+
+                question.options.forEach((option) => {
+                    const optionId = `question-${index}-option-${option}`;
+                    const optionWrapper = document.createElement('label');
+                    optionWrapper.className = 'option';
+
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = `question-${index}`;
+                    input.value = option;
+                    input.id = optionId;
+                    input.addEventListener('change', () => {
+                        userSelections.set(index, option);
+                        if (answersRevealed) {
+                            highlightAnswers();
+                        }
+                    });
+
+                    const text = document.createElement('span');
+                    text.textContent = option;
+
+                    optionWrapper.appendChild(input);
+                    optionWrapper.appendChild(text);
+                    optionsList.appendChild(optionWrapper);
+                });
+
+                card.appendChild(optionsList);
+
+                const sentencePreview = document.createElement('div');
+                sentencePreview.className = 'sentence-preview';
+                sentencePreview.textContent = `الجملة الأصلية: ${question.originalSentence}`;
+                card.appendChild(sentencePreview);
+
+                questionsSection.appendChild(card);
+            });
+        }
+
+        function highlightAnswers() {
+            const cards = questionsSection.querySelectorAll('.question-card');
+            cards.forEach((card) => {
+                const index = Number(card.dataset.index);
+                const question = currentQuestions[index];
+                const selected = userSelections.get(index);
+
+                card.querySelectorAll('.option').forEach((optionEl) => {
+                    optionEl.classList.remove('correct', 'incorrect');
+                    const optionValue = optionEl.querySelector('input').value;
+                    if (optionValue === question.answer) {
+                        optionEl.classList.add('correct');
+                    } else if (answersRevealed && selected === optionValue) {
+                        optionEl.classList.add('incorrect');
+                    }
+                });
+            });
+        }
+
+        function updateScore() {
+            let correctAnswers = 0;
+            currentQuestions.forEach((question, index) => {
+                const selected = userSelections.get(index);
+                if (selected === question.answer) {
+                    correctAnswers += 1;
+                }
+            });
+            scoreLabel.textContent = `نتيجتك: ${correctAnswers} من ${currentQuestions.length}`;
+        }
+
+        async function handleGenerate() {
+            clearMessage();
+
+            const file = pdfInput.files?.[0];
+            if (!file) {
+                showMessage('يرجى اختيار ملف PDF أولاً.');
+                return;
+            }
+
+            const questionCount = Number(questionCountInput.value) || 0;
+            if (questionCount <= 0) {
+                showMessage('يرجى تحديد عدد الأسئلة المطلوب (على الأقل سؤال واحد).');
+                return;
+            }
+
+            toggleLoading(true);
+            try {
+                const text = await extractTextFromPdf(file);
+                if (!text.trim()) {
+                    showMessage('تعذر استخراج نص من الملف. تأكد من أن الملف يحتوي على نص قابل للنسخ.');
+                    questionsSection.classList.add('hidden');
+                    resultsBar.classList.add('hidden');
+                    return;
+                }
+
+                const questions = generateQuestionsFromText(text, questionCount);
+                if (questions.length === 0) {
+                    showMessage('لم يتم العثور على جمل مناسبة لإنشاء أسئلة. حاول استخدام ملف مختلف أو قلل عدد الأسئلة.');
+                    questionsSection.classList.add('hidden');
+                    resultsBar.classList.add('hidden');
+                    return;
+                }
+
+                currentQuestions = questions;
+                renderQuestions(currentQuestions);
+                updateScore();
+                showMessage(`تم إنشاء ${questions.length} سؤالاً. يمكنك الآن الإجابة عليها!`, 'success');
+            } catch (error) {
+                console.error(error);
+                showMessage('حدث خطأ أثناء قراءة الملف. حاول مرة أخرى أو استخدم ملفاً مختلفاً.');
+                questionsSection.classList.add('hidden');
+                resultsBar.classList.add('hidden');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        function handleCheckAnswers() {
+            if (currentQuestions.length === 0) return;
+            answersRevealed = true;
+            highlightAnswers();
+            updateScore();
+        }
+
+        function handleRetry() {
+            answersRevealed = false;
+            userSelections.clear();
+            questionsSection.querySelectorAll('.option input').forEach((input) => {
+                input.checked = false;
+            });
+            highlightAnswers();
+            updateScore();
+        }
+
+        generateBtn.addEventListener('click', handleGenerate);
+        checkAnswersBtn.addEventListener('click', handleCheckAnswers);
+        retryBtn.addEventListener('click', handleRetry);
+    </script>
+</body>
+</html>
